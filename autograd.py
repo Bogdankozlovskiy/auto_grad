@@ -353,7 +353,8 @@ class TensorInConv(Tensor):
         chanels = data.shape[-1]
         self.rows_data = data.shape[1] - rows + 1
         self.cols_data = data.shape[2] - cols + 1
-        conv = (data[:, i:i + rows, j:j + cols].reshape((len_data, 1, len_vector, chanels)) for i in range(self.rows_data) for j in range(self.cols_data))
+        conv = (data[:, i:i + rows, j:j + cols].reshape((len_data, 1, len_vector, chanels))\
+        						for i in range(self.rows_data) for j in range(self.cols_data))
         return np.concatenate(tuple(conv), axis=1)
     
     def chop_imgs_bprop(self, data):
@@ -361,7 +362,8 @@ class TensorInConv(Tensor):
         k = 0
         for i in range(self.rows_data):
             for j in range(self.cols_data):
-                grad[:, i:i + self.rows, j:j + self.cols] += self.gradient[:, k].reshape((data.shape[0], self.rows, self.cols, data.shape[-1]))
+                grad[:, i:i + self.rows, j:j + self.cols] += \
+                self.gradient[:, k].reshape((data.shape[0], self.rows, self.cols, data.shape[-1]))
                 k += 0
         return grad
 
@@ -547,8 +549,12 @@ class TensorLSTM(Tensor):
         for i in range(self.left_data.shape[1]):
             X = TensorData(self.left_data[:, i])
             self.arr.append(X)
-            cell = ((X.dot(self.wxf) + hidden.dot(self.whf)).tanh() * cell) + ((X.dot(self.wxi) + hidden.dot(self.whi)).tanh() * (X.dot(self.wxc) + hidden.dot(self.whc)).tanh())
-            hidden = (X.dot(self.wxo) + hidden.dot(self.who)).tanh() * cell.tanh()
+            F = (X.dot(self.wxf) + hidden.dot(self.whf)).tanh()
+            I = (X.dot(self.wxi) + hidden.dot(self.whi)).tanh()
+            O = (X.dot(self.wxo) + hidden.dot(self.who)).tanh()
+            G = (X.dot(self.wxc) + hidden.dot(self.whc)).tanh()
+            cell = (F * cell) + (I * G)
+            hidden = O * cell.tanh()
         self.tail = hidden.dot(self.wh2o)
         self.result = self.tail.forward()
         return self.result
