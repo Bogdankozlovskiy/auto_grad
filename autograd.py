@@ -1,6 +1,5 @@
 import numpy as np
 from collections import defaultdict
-from matplotlib import pyplot as plt
 from skimage.measure import block_reduce
 
 
@@ -31,24 +30,6 @@ class Tensor:
             self.gradient += gradient
         if child is not None:
             self.children[child] -= 1
-    
-    def chop_imgs(self, data, rows, cols):
-        len_vector = rows * cols
-        len_data = data.shape[0]
-        chanels = data.shape[-1]
-        self.rows_data = data.shape[1] - rows + 1
-        self.cols_data = data.shape[2] - cols + 1
-        conv = (data[:, i:i + rows, j:j + cols].reshape((len_data, 1, len_vector, chanels)) for i in range(self.rows_data) for j in range(self.cols_data))
-        return np.concatenate(tuple(conv), axis=1)
-    
-    def chop_imgs_bprop(self, data):
-        a = np.zeros_like(data)
-        k = 0
-        for i in range(self.rows_data):
-            for j in range(self.cols_data):
-                a[:, i:i + self.rows, j:j + self.cols] += self.gradient[:,k].reshape((data.shape[0], self.rows, self.cols, data.shape[-1]))
-                k += 0
-        return a
     
     def dot(self, other):
         return TensorDot(parents=[self, other])
@@ -366,6 +347,24 @@ class TensorInConv(Tensor):
             new_grad = self.chop_imgs_bprop(result)
             self.parents[0].bprop(new_grad, child=self)
 
+    def chop_imgs(self, data, rows, cols):
+        len_vector = rows * cols
+        len_data = data.shape[0]
+        chanels = data.shape[-1]
+        self.rows_data = data.shape[1] - rows + 1
+        self.cols_data = data.shape[2] - cols + 1
+        conv = (data[:, i:i + rows, j:j + cols].reshape((len_data, 1, len_vector, chanels)) for i in range(self.rows_data) for j in range(self.cols_data))
+        return np.concatenate(tuple(conv), axis=1)
+    
+    def chop_imgs_bprop(self, data):
+        grad = np.zeros_like(data)
+        k = 0
+        for i in range(self.rows_data):
+            for j in range(self.cols_data):
+                grad[:, i:i + self.rows, j:j + self.cols] += self.gradient[:, k].reshape((data.shape[0], self.rows, self.cols, data.shape[-1]))
+                k += 0
+        return grad
+
 
 class TensorOutConv(Tensor):
     def forward(self):
@@ -546,9 +545,9 @@ class TensorLSTM(Tensor):
         hidden = TensorData(np.zeros((self.left_data.shape[0], self.whf.data.shape[0])))
         cell = TensorData(np.zeros((self.left_data.shape[0], self.whc.data.shape[0])))
         for i in range(self.left_data.shape[1]):
-            X = TensorData(self.left_data[:,i])
+            X = TensorData(self.left_data[:, i])
             self.arr.append(X)
-            cell = ((X.dot(self.wxf) + hidden.dot(self.whf)).tanh() * cell) + ((X.dot(self.wxi) + hidden.dot(self.whi)).tanh() * (X.dot(self.wxc) + hidden.dot(self.whc)).tanh()) ################
+            cell = ((X.dot(self.wxf) + hidden.dot(self.whf)).tanh() * cell) + ((X.dot(self.wxi) + hidden.dot(self.whi)).tanh() * (X.dot(self.wxc) + hidden.dot(self.whc)).tanh())
             hidden = (X.dot(self.wxo) + hidden.dot(self.who)).tanh() * cell.tanh()
         self.tail = hidden.dot(self.wh2o)
         self.result = self.tail.forward()
