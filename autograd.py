@@ -10,15 +10,19 @@ class Tensor:
         self.gradient = None
         self.parents = parents
         self.children = defaultdict(int)
-    
+        self.flag = False
     
     def forward(self):
+        if self.flag:
+            return self.result
+        self.flag = True
         if self.parents is not None:
             for p in self.parents:
                 p.children[self] += 1
             self.left_data = self.parents[0].forward()
     
     def bprop(self, gradient=None, child=None):
+        self.flag = False
         if (self.gradient is None) or self.parents is not None:
             self.gradient = np.zeros_like(self.result, dtype=np.float64)
         if gradient is None:
@@ -67,8 +71,8 @@ class Tensor:
     def relu(self):
         return TensorRelu(parents=[self])
     
-    def cross_entropy(self, target):
-        return TensorCrossEntropy(target=target, parents=[self])
+    def cross_entropy(self, target, num_classes=None):
+        return TensorCrossEntropy(target=target, num_classes=num_classes, parents=[self])
 
     def in_conv(self, rows, cols):
         return TensorInConv(rows=rows, cols=cols, parents=[self])
@@ -89,6 +93,12 @@ class Tensor:
     def to_iter(self, batch_size=1):
         assert isinstance(self, TensorData), "object has to instance of TensorData"
         return TensorIter(batch_size=batch_size, parents=[self])
+    
+    def rnn(self, wih, whh, who):
+        return TensorRNN(wih=wih, whh=whh, who=who, parents=[self])
+    
+    def lstm(self, wxf, wxi, wxo, wxc, whf, whi, who, whc, wh2o):
+        return TensorLSTM(wxf=wxf, wxi=wxi, wxo=wxo, wxc=wxc, whf=whf, whi=whi, who=who, whc=whc, wh2o=wh2o, parents=[self])
     
     def __add__(self, other):
         return TensorAdd(parents=[self, other])
@@ -118,7 +128,7 @@ class Tensor:
         return TensorGreate(digit=other, parents=[self])
 
     def __getitem__(self, other):
-    	return TensorGetItem(parents=[self, other])
+        return TensorGetItem(parents=[self, other])
 
 
 class TensorDot(Tensor):
@@ -144,6 +154,7 @@ class TensorDot(Tensor):
             data = np.tensordot(left, self.gradient, axes=[axes, axes])
             self.parents[1].bprop(data, child=self)
 
+
 class TensorSum(Tensor):
     def __init__(self, axis, data=None, parents=None):
         super().__init__(data, parents)
@@ -163,6 +174,7 @@ class TensorSum(Tensor):
             new_grad = self.gradient.repeat(self.expand).reshape(new_shape)
             self.parents[0].bprop(new_grad, child=self)
 
+
 class TensorDropOut(Tensor):
     def forward(self):
         super().forward()
@@ -174,6 +186,7 @@ class TensorDropOut(Tensor):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient * self.mask, child=self)
+
 
 class TensorBatchNormalize(Tensor):
     def forward(self):
@@ -188,6 +201,7 @@ class TensorBatchNormalize(Tensor):
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient, child=self)
 
+
 class TensorTanh(Tensor):
     def forward(self):
         super().forward()
@@ -198,6 +212,7 @@ class TensorTanh(Tensor):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient * (1 - self.result ** 2), child=self)
+
 
 class TensorSigmoid(Tensor):
     def forward(self):
@@ -211,6 +226,7 @@ class TensorSigmoid(Tensor):
             data = self.parents[0].result
             self.parents[0].bprop(data * (1 - data) * self.gradient, child=self)
 
+
 class TensorRelu(Tensor):
     def forward(self):
         super().forward()
@@ -223,11 +239,12 @@ class TensorRelu(Tensor):
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient * self.mask, child=self)
 
+
 class TensorCrossEntropy(Tensor):
-    def __init__(self, target, data=None, parents=None):
+    def __init__(self, target, num_classes=None, data=None, parents=None):
         super().__init__(data, parents)
         self.target = target
-        self.num_classes = target.data.max() + 1
+        self.num_classes = target.data.max() + 1 if num_classes is None else num_classes
     
     def forward(self):
         super().forward()
@@ -243,6 +260,7 @@ class TensorCrossEntropy(Tensor):
         if not sum(self.children.values()):
             self.parents[0].bprop(self.softmax - self.decoded_target, child=self)
 
+
 class TensorAdd(Tensor):
     def forward(self):
         super().forward()
@@ -255,6 +273,7 @@ class TensorAdd(Tensor):
             self.parents[0].bprop(self.gradient, child=self)
             self.parents[1].bprop(self.gradient, child=self)
 
+
 class TensorSub(Tensor):
     def forward(self):
         super().forward()
@@ -266,6 +285,7 @@ class TensorSub(Tensor):
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient, child=self)
             self.parents[1].bprop(-self.gradient, child=self)
+
 
 class TensorSubInt(Tensor):
     def __init__(self, digit, data=None, parents=None):
@@ -282,6 +302,7 @@ class TensorSubInt(Tensor):
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient, child=self)
 
+
 class TensorMul(Tensor):
     def forward(self):
         super().forward()
@@ -293,6 +314,7 @@ class TensorMul(Tensor):
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient * self.parents[1].result, child=self)
             self.parents[1].bprop(self.gradient * self.parents[0].result, child=self)
+
 
 class TensorMulInt(Tensor):
     def __init__(self, digit, data=None, parents=None):
@@ -309,6 +331,7 @@ class TensorMulInt(Tensor):
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient * self.digit)
 
+
 class TensorPow(Tensor):
     def __init__(self, power, data=None, parents=None):
         super().__init__(data, parents)
@@ -323,6 +346,7 @@ class TensorPow(Tensor):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
             self.parents[0].bprop(self.power * self.gradient * self.parents[0].result, child=self)
+
 
 class TensorInConv(Tensor):
     def __init__(self, rows, cols, data=None, parents=None):
@@ -342,6 +366,7 @@ class TensorInConv(Tensor):
             new_grad = self.chop_imgs_bprop(result)
             self.parents[0].bprop(new_grad, child=self)
 
+
 class TensorOutConv(Tensor):
     def forward(self):
         super().forward()
@@ -356,7 +381,8 @@ class TensorOutConv(Tensor):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient.reshape(self.parents[0].result.shape), child=self)
-    
+
+
 class TensorFlatten(Tensor):
     def forward(self):
         super().forward()
@@ -368,6 +394,7 @@ class TensorFlatten(Tensor):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient.reshape(self.shape), child=self)
+
 
 class TensorMaxPoling(Tensor):
     def __init__(self, rows, cols, data=None, parents=None):
@@ -387,13 +414,14 @@ class TensorMaxPoling(Tensor):
         if not sum(self.children.values()):
             data = np.repeat(np.repeat(self.gradient, self.rows, axis=1), self.cols, axis=2) * self.mask
             self.parents[0].bprop(data, child=self)
-    
+
+
 class TensorData(Tensor):
     def forward(self):
         super().forward()
-        if self.data is not None:
-            self.result = self.data
+        self.result = self.data
         return self.result
+
 
 class TensorTranspouse(Tensor): 
     def forward(self):
@@ -405,6 +433,7 @@ class TensorTranspouse(Tensor):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient.T, child=self)
+
 
 class TensorLess(Tensor):
     def __init__(self, digit, data=None, parents=None):
@@ -421,7 +450,8 @@ class TensorLess(Tensor):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient * self.mask, child=self)
-            
+
+
 class TensorGreate(Tensor):
     def __init__(self, digit, data=None, parents=None):
         super().__init__(data, parents)
@@ -437,6 +467,7 @@ class TensorGreate(Tensor):
         super().bprop(gradient=gradient, child=child)
         self.parents[0].bprop(self.gradient, child=self)
 
+
 class TensorGetItem(Tensor):
     def forward(self):
         super().forward()
@@ -451,6 +482,7 @@ class TensorGetItem(Tensor):
             gradient[self.right_data] += self.gradient
             self.parents[0].bprop(gradient, child=self)
 
+
 class TensorIter(Tensor):
     def __init__(self, batch_size, data=None, parents=None):
         super().__init__(data, parents)
@@ -461,10 +493,71 @@ class TensorIter(Tensor):
 
     def forward(self):
         super().forward()
-        out = self.data[self.step * self.batch_size:(self.step + 1) * self.batch_size]
+        self.result = self.data[self.step * self.batch_size:(self.step + 1) * self.batch_size]
         self.step += 1
         self.step %= self.length
-        return out
+        return self.result
 
-class TensorX(Tensor):
-    pass
+
+class TensorRNN(Tensor):
+    def __init__(self, wih, whh, who, data=None, parents=None):
+        super().__init__(data, parents)
+        self.wih = wih
+        self.whh = whh
+        self.who = who
+        
+    def forward(self):
+        super().forward()
+        self.arr = []
+        self.hidden = TensorData(np.zeros((self.left_data.shape[0], self.whh.data.shape[0])))
+        for i in range(self.left_data.shape[1]):
+            X = TensorData(self.left_data[:,i])
+            self.arr.append(X)
+            self.hidden = (X.dot(self.wih) + self.hidden.dot(self.whh)).tanh()  # with a sigmoid we have nan
+        self.tail = self.hidden.dot(self.who)
+        self.result = self.tail.forward()
+        return self.result
+    
+    def bprop(self, gradient=None, child=None):
+        super().bprop(gradient=gradient, child=child)
+        if not sum(self.children.values()):
+            self.tail.bprop(self.gradient)
+            length = self.left_data.shape[1]
+            grad = np.concatenate([self.arr[i].gradient[:, np.newaxis] for i in range(length)], axis=1)
+            self.parents[0].bprop(grad, child=self)
+
+
+class TensorLSTM(Tensor):
+    def __init__(self, wxf, wxi, wxo, wxc, whf, whi, who, whc, wh2o, data=None, parents=None):
+        super().__init__(data, parents)
+        self.wxf = wxf # input  forgot gate (inputs, hidden)
+        self.wxi = wxi # input  input  gate (inputs, hidden)
+        self.wxo = wxo # output input  gate (inputs, hidden)
+        self.wxc = wxc # cell   input  gate (inputs, hidden)
+        self.whf = whf # hidden forgot gate (hidden, hidden)
+        self.whi = whi # input  hidden gate (hidden, hidden)
+        self.who = who # output hidden gate (hidden, hidden)
+        self.whc = whc # cell   hidden gate (hidden, hidden)
+        self.wh2o = wh2o # hidden to output (hidden, output)
+    
+    def forward(self):
+        super().forward()
+        self.arr = []
+        hidden = TensorData(np.zeros((self.left_data.shape[0], self.whf.data.shape[0])))
+        cell = TensorData(np.zeros((self.left_data.shape[0], self.whc.data.shape[0])))
+        for i in range(self.left_data.shape[1]):
+            X = TensorData(self.left_data[:,i])
+            self.arr.append(X)
+            cell = ((X.dot(self.wxf) + hidden.dot(self.whf)).tanh() * cell) + ((X.dot(self.wxi) + hidden.dot(self.whi)).tanh() * (X.dot(self.wxc) + hidden.dot(self.whc)).tanh()) ################
+            hidden = (X.dot(self.wxo) + hidden.dot(self.who)).tanh() * cell.tanh()
+        self.tail = hidden.dot(self.wh2o)
+        self.result = self.tail.forward()
+        return self.result
+    
+    def bprop(self, gradient=None, child=None):
+        super().bprop(gradient=gradient, child=child)
+        if not sum(self.children.values()):
+            self.tail.bprop(self.gradient)
+            length = self.left_data.shape[1]
+            grad = np.concatenate([self.arr[i].gradient[:, np.newaxis] for i in range(length)], axis=1)
+            self.parents[0].bprop(grad, child=self)
