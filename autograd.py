@@ -508,13 +508,14 @@ class TensorRNN(Tensor):
         self.who = who
         
     def forward(self):
+        '''we have to use gradient parting in optimizer. because sigmoid in the forward'''
         super().forward()
         self.arr = []
         self.hidden = TensorData(np.zeros((self.left_data.shape[0], self.whh.data.shape[0])))
         for i in range(self.left_data.shape[1]):
             X = TensorData(self.left_data[:,i])
             self.arr.append(X)
-            self.hidden = (X.dot(self.wih) + self.hidden.dot(self.whh)).tanh()  # with a sigmoid we have nan
+            self.hidden = (X.dot(self.wih) + self.hidden.dot(self.whh)).sigmoid()
         self.tail = self.hidden.dot(self.who)
         self.result = self.tail.forward()
         return self.result
@@ -542,6 +543,7 @@ class TensorLSTM(Tensor):
         self.wh2o = wh2o # hidden to output (hidden, output)
     
     def forward(self):
+        '''we have to use gradient parting in optimizer. because sigmoid in the forward'''
         super().forward()
         self.arr = []
         hidden = TensorData(np.zeros((self.left_data.shape[0], self.whf.data.shape[0])))
@@ -549,9 +551,9 @@ class TensorLSTM(Tensor):
         for i in range(self.left_data.shape[1]):
             X = TensorData(self.left_data[:, i])
             self.arr.append(X)
-            F = (X.dot(self.wxf) + hidden.dot(self.whf)).tanh()
-            I = (X.dot(self.wxi) + hidden.dot(self.whi)).tanh()
-            O = (X.dot(self.wxo) + hidden.dot(self.who)).tanh()
+            F = (X.dot(self.wxf) + hidden.dot(self.whf)).sigmoid()
+            I = (X.dot(self.wxi) + hidden.dot(self.whi)).sigmoid()
+            O = (X.dot(self.wxo) + hidden.dot(self.who)).sigmoid()
             G = (X.dot(self.wxc) + hidden.dot(self.whc)).tanh()
             cell = (F * cell) + (I * G)
             hidden = O * cell.tanh()
