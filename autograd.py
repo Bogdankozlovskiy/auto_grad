@@ -55,6 +55,9 @@ class Tensor:
     def cross_entropy(self, target, num_classes=None):
         return TensorCrossEntropy(target=target, num_classes=num_classes, parents=[self])
 
+    def binary_cross_entropy(self, target):
+        return TensorBinaryCrossEntropy(target=target, parents=[self])
+
     def in_conv(self, rows, cols):
         return TensorInConv(rows=rows, cols=cols, parents=[self])
     
@@ -110,6 +113,9 @@ class Tensor:
 
     def __getitem__(self, other):
         return TensorGetItem(parents=[self, other])
+
+    def __abs__(self):
+        return TensorAbs(parents=[self])
 
 
 class TensorDot(Tensor):
@@ -242,6 +248,23 @@ class TensorCrossEntropy(Tensor):
             self.parents[0].bprop(self.softmax - self.decoded_target, child=self)
 
 
+class TensorBinaryCrossEntropy(Tensor):
+    def __init__(self, target, data=None, parents=None):
+        super().__init__(data, parents)
+        self.target = target
+
+    def forward(self):
+        super().forward()
+        self.result = - self.target * np.log(self.left_data) \
+                - (1 - self.target) * np.log(1 - self.left_data)
+        return self.result
+
+    def bprop(self, gradient=None, child=None):
+        super().bprop(gradient=gradient, child=child)
+        if not sum(self.children.values()):
+            self.parents[0].bprop(self.left_data - self.target, child=self)
+
+
 class TensorAdd(Tensor):
     def forward(self):
         super().forward()
@@ -310,7 +333,7 @@ class TensorMulInt(Tensor):
     def bprop(self, gradient=None, child=None):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
-            self.parents[0].bprop(self.gradient * self.digit)
+            self.parents[0].bprop(self.gradient * self.digit, child=self)
 
 
 class TensorPow(Tensor):
@@ -327,6 +350,19 @@ class TensorPow(Tensor):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
             self.parents[0].bprop(self.power * self.gradient * self.parents[0].result, child=self)
+
+
+class TensorAbs(Tensor):
+    def forward(self):
+        super().forward()
+        self.result = abs(self.left_data)
+        self.new_grad = (self.left_data > 0).astype("i") - (self.left_data < 0).astype("i")
+        return self.result
+
+    def bprop(self, gradient=None, child=None):
+        super().bprop(gradient=gradient, child=child)
+        if not sum(self.children.values()):
+            self.parents[0].bprop(self.gradient * self.new_grad, child=self)
 
 
 class TensorInConv(Tensor):
@@ -354,7 +390,7 @@ class TensorInConv(Tensor):
         self.rows_data = data.shape[1] - rows + 1
         self.cols_data = data.shape[2] - cols + 1
         conv = (data[:, i:i + rows, j:j + cols].reshape((len_data, 1, len_vector, chanels))\
-        						for i in range(self.rows_data) for j in range(self.cols_data))
+                                for i in range(self.rows_data) for j in range(self.cols_data))
         return np.concatenate(tuple(conv), axis=1)
     
     def chop_imgs_bprop(self, data):
