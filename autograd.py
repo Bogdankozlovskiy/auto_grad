@@ -210,8 +210,7 @@ class TensorSigmoid(Tensor):
     def bprop(self, gradient=None, child=None):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
-            data = self.parents[0].result
-            self.parents[0].bprop(data * (1 - data) * self.gradient, child=self)
+            self.parents[0].bprop(self.result * (1 - self.result) * self.gradient, child=self)
 
 
 class TensorRelu(Tensor):
@@ -231,13 +230,13 @@ class TensorCrossEntropy(Tensor):
     def __init__(self, target, num_classes=None, data=None, parents=None):
         super().__init__(data, parents)
         self.target = target
-        self.num_classes = target.data.max() + 1 if num_classes is None else num_classes
+        self.num_classes = target.max() + 1 if num_classes is None else num_classes
     
     def forward(self):
         super().forward()
         tmp = np.exp(self.left_data - np.max(self.left_data, keepdims=True, axis=self.left_data.ndim - 1))
         self.softmax = tmp / np.sum(tmp, keepdims=True, axis=self.left_data.ndim - 1)
-        self.decoded_target = np.eye(self.num_classes)[self.target.forward()]
+        self.decoded_target = np.eye(self.num_classes)[self.target]
         loss = (-np.log(self.softmax) * self.decoded_target).sum()
         self.result = loss
         return self.result
@@ -245,7 +244,7 @@ class TensorCrossEntropy(Tensor):
     def bprop(self, gradient=None, child=None):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
-            self.parents[0].bprop(self.softmax - self.decoded_target, child=self)
+            self.parents[0].bprop((self.softmax - self.decoded_target) * self.gradient, child=self)
 
 
 class TensorBinaryCrossEntropy(Tensor):
@@ -255,14 +254,15 @@ class TensorBinaryCrossEntropy(Tensor):
 
     def forward(self):
         super().forward()
-        self.result = - self.target * np.log(self.left_data) \
+        result = - self.target * np.log(self.left_data) \
                 - (1 - self.target) * np.log(1 - self.left_data)
+        self.result = result.sum()
         return self.result
 
     def bprop(self, gradient=None, child=None):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
-            self.parents[0].bprop(self.left_data - self.target, child=self)
+            self.parents[0].bprop((self.left_data - self.target) * self.gradient, child=self)
 
 
 class TensorAdd(Tensor):
