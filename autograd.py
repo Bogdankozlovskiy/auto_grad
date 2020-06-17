@@ -1,3 +1,6 @@
+__all__ = ("TensorData", )
+
+
 import numpy as np
 from collections import defaultdict
 from skimage.measure import block_reduce
@@ -106,10 +109,6 @@ class Tensor:
     def __lt__(self, other):
         '''for SVM mashine'''
         return TensorLess(digit=other, parents=[self])
-    
-    def __gt__(self, other):
-        '''for logistick regression'''
-        return TensorGreate(digit=other, parents=[self])
 
     def __getitem__(self, other):
         return TensorGetItem(parents=[self, other])
@@ -487,22 +486,6 @@ class TensorLess(Tensor):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
             self.parents[0].bprop(self.gradient * self.mask, child=self)
-
-
-class TensorGreate(Tensor):
-    def __init__(self, digit, data=None, parents=None):
-        super().__init__(data, parents)
-        self.digit = digit
-    
-    def forward(self):
-        super().forward()
-        self.mask = self.left_data > self.digit
-        self.result = self.left_data * self.mask
-        return self.result
-    
-    def bprop(self, gradient=None, child=None):
-        super().bprop(gradient=gradient, child=child)
-        self.parents[0].bprop(self.gradient, child=self)
 
 
 class TensorGetItem(Tensor):
