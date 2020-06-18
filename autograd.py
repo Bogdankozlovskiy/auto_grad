@@ -91,11 +91,7 @@ class Tensor:
         return TensorAdd(parents=[self, other])
     
     def __sub__(self, other):
-        '''TensorSubInt for logistick regression'''
-        if issubclass(other.__class__, Tensor):
-            return TensorSub(parents=[self, other])
-        elif isinstance(other, int) or isinstance(other, float):
-            return TensorSubInt(digit=other, parents=[self])
+        return TensorSub(parents=[self, other])
     
     def __mul__(self, other):
         if issubclass(other.__class__, Tensor):
@@ -290,22 +286,6 @@ class TensorSub(Tensor):
             self.parents[1].bprop(-self.gradient, child=self)
 
 
-class TensorSubInt(Tensor):
-    def __init__(self, digit, data=None, parents=None):
-        super().__init__(data, parents)
-        self.digit = digit
-    
-    def forward(self):
-        super().forward()
-        self.result = self.left_data - self.digit
-        return self.result
-    
-    def bprop(self, gradient=None, child=None):
-        super().bprop(gradient=gradient, child=child)
-        if not sum(self.children.values()):
-            self.parents[0].bprop(self.gradient, child=self)
-
-
 class TensorMul(Tensor):
     def forward(self):
         super().forward()
@@ -399,7 +379,7 @@ class TensorInConv(Tensor):
             for j in range(self.cols_data):
                 grad[:, i:i + self.rows, j:j + self.cols] += \
                 self.gradient[:, k].reshape((data.shape[0], self.rows, self.cols, data.shape[-1]))
-                k += 0
+                k += 1
         return grad
 
 
