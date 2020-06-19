@@ -78,7 +78,6 @@ class Tensor:
         return TensorTranspouse(parents=[self])
 
     def to_iter(self, batch_size=1):
-        assert isinstance(self, TensorData), "object has to instance of TensorData"
         return TensorIter(batch_size=batch_size, parents=[self])
     
     def rnn(self, wih, whh, who):
@@ -222,16 +221,18 @@ class TensorRelu(Tensor):
 
 
 class TensorCrossEntropy(Tensor):
-    def __init__(self, target, num_classes=None, data=None, parents=None):
+    def __init__(self, target, num_classes, data=None, parents=None):
         super().__init__(data, parents)
-        self.target = target
-        self.num_classes = target.max() + 1 if num_classes is None else num_classes
+        numpy_fun = lambda : target
+        tensor_fun = lambda : target.forward()
+        self.target = tensor_fun if isinstance(target, Tensor) else numpy_fun
+        self.num_classes = num_classes
     
     def forward(self):
         super().forward()
         tmp = np.exp(self.left_data - np.max(self.left_data, keepdims=True, axis=self.left_data.ndim - 1))
         self.softmax = tmp / np.sum(tmp, keepdims=True, axis=self.left_data.ndim - 1)
-        self.decoded_target = np.eye(self.num_classes)[self.target]
+        self.decoded_target = np.eye(self.num_classes)[self.target()]
         loss = (-np.log(self.softmax) * self.decoded_target).sum()
         self.result = loss
         return self.result
