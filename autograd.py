@@ -40,8 +40,8 @@ class Tensor:
     def sum(self, axis):
         return TensorSum(axis=axis, parents=[self])
     
-    def drop_out(self):
-        return TensorDropOut(parents=[self])
+    def drop_out(self, prob):
+        return TensorDropOut(prob=prob, parents=[self])
     
     def batch_normalize(self):
         return TensorBatchNormalize(parents=[self])
@@ -157,16 +157,21 @@ class TensorSum(Tensor):
 
 
 class TensorDropOut(Tensor):
+    def __init__(self, prob, data=None, parents=None):
+        super().__init__(data, parents)
+        self.prob = prob
+
     def forward(self):
         super().forward()
-        self.mask = np.random.randint(0, 2, size=self.left_data.shape)
-        self.result = self.mask * self.left_data * 2
+        self.mask = np.random.random(size=self.left_data.shape) > self.prob
+        self.result = self.mask * self.left_data / (1 - self.prob)
         return self.result
     
     def bprop(self, gradient=None, child=None):
         super().bprop(gradient=gradient, child=child)
         if not sum(self.children.values()):
-            self.parents[0].bprop(self.gradient * self.mask, child=self)
+            grad = self.gradient * self.mask / (1 - self.prob)
+            self.parents[0].bprop(grad, child=self)
 
 
 class TensorBatchNormalize(Tensor):
